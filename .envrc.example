@@ -1,0 +1,3 @@
+export COGNITO_DOMAIN="your-vue-domain.ap-southeast-2.amazoncognito.com"
+export CLIENT_ID="lolol"
+export REDIRECT_URL="https://localhost:4200/auth/redirect"

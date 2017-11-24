@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  Name: 
+    Type: String
+    Default: VueDemo 
+  Environment: 
+    Type: String
+    Default: Dev
+    AllowedValues: [ Dev, Test, Prod ]
+    Description: Suffix to be added for names.
+Resources:
+  CognitoUserPool:
+    Type: "AWS::Cognito::UserPool"
+    Properties:
+      UserPoolName: !Sub ${Name}UserPool${Environment}
+      AliasAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: email
+          AttributeDataType: String
+          Mutable: false
+          Required: true
+  CognitoUserSPAClient:
+    Type: "AWS::Cognito::UserPoolClient"
+    Properties:
+        ClientName: !Sub ${Name}UserSPAClient${Environment}
+        GenerateSecret: False
+        RefreshTokenValidity: 30
+        UserPoolId: !Ref CognitoUserPool
+  CognitoIdentityPool:
+    Type: "AWS::Cognito::IdentityPool"
+    Properties:
+      IdentityPoolName: !Sub ${Name}IdentityPool${Environment}
+      AllowUnauthenticatedIdentities: False
+      CognitoIdentityProviders:
+        - ClientId: !Ref CognitoUserSPAClient
+          ProviderName: !GetAtt CognitoUserPool.ProviderName
+  CognitoUnauthRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub Cognito_${CognitoIdentityPool.Name}_Unauth_Role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: [ 'sts:AssumeRole' ]
+      Policies:
+        - PolicyName: CognitoUnauthorizedPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                - mobileanalytics:PutEvents
+                - cognito-sync:*
+                Resource:
+                - "*"
+  CognitoAuthRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub Cognito_${CognitoIdentityPool.Name}_Auth_Role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: [ 'sts:AssumeRole' ]
+      Policies:
+        - PolicyName: CognitoAuthorizedPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                - mobileanalytics:PutEvents
+                - cognito-sync:*
+                - execute-api:*
+                Resource:
+                - "*"
+  IdentityPoolRoleAttachment:
+    DependsOn: [ CognitoIdentityPool, CognitoUnauthRole, CognitoAuthRole ]
+    Type: "AWS::Cognito::IdentityPoolRoleAttachment"
+    Properties:
+      IdentityPoolId: !Ref CognitoIdentityPool
+      Roles: 
+        authenticated: !GetAtt CognitoAuthRole.Arn
+        unauthenticated: !GetAtt CognitoUnauthRole.Arn
+Outputs:
+ CognitoUserPool:
+    Description: "User pool ID"
+    Value: !Ref CognitoUserPool
+ CognitoIdentityPool:
+    Description: "Identity pool ID"
+    Value: !Ref CognitoIdentityPool
+ CognitoUserSPAClientId: 
+    Description: "Client ID for the SPA client"
+    Value: !Ref CognitoUserSPAClient
